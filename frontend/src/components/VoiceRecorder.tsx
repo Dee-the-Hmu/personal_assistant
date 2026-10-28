@@ -1,13 +1,23 @@
 import { useRef, useState } from "react";
 
+/*
+returns React Component that records microphone audio
+- stores the recorded chunks
+- allow playback
+*/
 export default function VoiceRecorder() {
     const [isRecording, setIsRecording] = useState(false); 
 
     const recorderRef = useRef<MediaRecorder | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
 
+    const [audioURL, setAudioURL] = useState<string | null>(null); 
+
+    // start Microhpone Access
+    // records audio in chunks 
+    // combine those audio chunks into a playable audio Blob when stopped
     async function startRecording() {
-
         try{ 
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio : true,
@@ -23,7 +33,19 @@ export default function VoiceRecorder() {
             recorder.ondataavailable = (event) => {
                 if (event.data.size > 0){ //Blob size in bytes
                     console.log(event.data); 
+                    audioChunksRef.current.push(event.data);
                 }
+            };
+
+            //combine chunks into final Blob
+            recorder.onstop = () => {
+                const audioBlob = new Blob(audioChunksRef.current, {
+                    type : recorder.mimeType
+                });
+
+                const url = URL.createObjectURL(audioBlob);
+                setAudioURL(url); 
+                audioChunksRef.current = []; 
             };
 
             recorder.start(250); //starts recording, give me recorded audio data in chunks about every 250 millisecond
@@ -36,7 +58,7 @@ export default function VoiceRecorder() {
     }
 
     function stopRecording() {
-        recorderRef.current?.stop(); 
+        recorderRef.current?.stop();  //this triggers recorder.onstop
 
         //get the media (audio) track belonging to the stream
         streamRef.current?.getTracks().forEach((track) => { 
@@ -59,6 +81,8 @@ export default function VoiceRecorder() {
             <button onClick={stopRecording} disabled={!isRecording}>
                 Stop
             </button>
+
+            {audioURL && (<audio src={audioURL} controls /> )}
         </div>
     );
 }
