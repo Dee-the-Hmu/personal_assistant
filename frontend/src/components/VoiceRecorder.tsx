@@ -34,6 +34,8 @@ export default function VoiceRecorder() {
                 if (event.data.size > 0){ //Blob size in bytes
                     console.log(event.data); 
                     audioChunksRef.current.push(event.data);
+
+                    //TODO:  send each audio chunk to backend here
                 }
             };
 
