@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 #creates our web application
@@ -31,9 +31,12 @@ while True = keeps listening while the connection stays open
 async def websocket_endpoint(websocket : WebSocket):
     await websocket.accept()
 
-    while True:
-        audio_chunk = await websocket.receive_bytes() #wait until the client sends a blob
+    try:
+        while True: #websocket is a continuous stream
+            audio_chunk = await websocket.receive_bytes() #wait until the client sends a blob
+            print("Received audio bytes: ", len(audio_chunk))
 
-        print("Received audio bytes: ", len(audio_chunk))
+    except WebSocketDisconnect: #when the client disconnects while await websocket.receive_bytes(), WebSocketDisconnect Exception is raised
+        print("Voice WebSocket disconnected")
 
    
