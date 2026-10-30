@@ -61,6 +61,7 @@ async def websocket_endpoint(websocket : WebSocket):
 
             if transcript is not None: 
 
+                """
                 backend_received_time = time.perf_counter()
                 print(
                     f"[BACKEND] Transcript received at: "
@@ -71,10 +72,8 @@ async def websocket_endpoint(websocket : WebSocket):
                     "text": transcript,
                     "backend_received_time": backend_received_time,
                 })
-             
-                
-                
-                # await websocket.send_text(transcript) #sends text back thru the same browser websocket
+                """
+                await websocket.send_text(transcript) #sends text back thru the same browser websocket
 
     #asyncio.create_task() schedules Each coroutine to run Concurrently
     audio_task = asyncio.create_task(send_audio_to_stt())

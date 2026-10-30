@@ -136,6 +136,10 @@ export default function VoiceRecorder() {
                 }
             };
 
+            socket.onmessage = (event) => {
+                console.log("Transcript: ", event.data)
+            };
+
             // Save these so stopRecording() can access and clean them up.
             audioContextRef.current = audioContext;
             workletRef.current = worklet;
