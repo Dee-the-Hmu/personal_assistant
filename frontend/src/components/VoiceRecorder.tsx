@@ -12,6 +12,8 @@ export default function VoiceRecorder() {
     const streamRef = useRef<MediaStream | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
 
+    const webSocketRef = useRef<WebSocket | null>(null); 
+
     const [audioURL, setAudioURL] = useState<string | null>(null); 
 
     // start Microhpone Access
@@ -19,41 +21,47 @@ export default function VoiceRecorder() {
     // combine those audio chunks into a playable audio Blob when stopped
     async function startRecording() {
         try{ 
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio : true,
-            });
 
-            streamRef.current = stream;
-            
-            const recorder = new MediaRecorder(stream); //recorder now knows which stream it should record
+            const socket = new WebSocket("ws://127.0.0.1:8000/ws"); 
 
-            //recorder produces an event whenever an audio chunk becomes available
-            //event.data = a Blob (browser obj representing binary data)
-            //don't send empty chunks
-            recorder.ondataavailable = (event) => {
-                if (event.data.size > 0){ //Blob size in bytes
-                    console.log(event.data); 
-                    audioChunksRef.current.push(event.data);
+            socket.onopen = async () => {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio : true,
+                })
+                
+                const recorder = new MediaRecorder(stream); //recorder now knows which stream it should record
 
-                    //TODO:  send each audio chunk to backend here
-                }
+                //recorder produces an event whenever an audio chunk becomes available
+                //event.data = a Blob (browser obj representing binary data)
+                //don't send empty chunks
+                recorder.ondataavailable = (event) => {
+                    if(event.data.size > 0) { //Blob size in bytes
+                        audioChunksRef.current.push(event.data);
+
+                        //send each audio chunk to backend using websocket here
+                        socket.send(event.data);
+                    }
+                };
+
+                recorder.start(250); //starts recording, give me recorded audio data in chunks about every 250 millisecond
+
+                streamRef.current = stream;
+                recorderRef.current = recorder; 
+                webSocketRef.current = socket;
+
+                //combine chunks into final Blob (playable audio)
+                recorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunksRef.current, {
+                        type : recorder.mimeType
+                    });
+
+                    const url = URL.createObjectURL(audioBlob);
+                    setAudioURL(url); 
+                    audioChunksRef.current = []; 
+                };
+
+                setIsRecording(true);
             };
-
-            //combine chunks into final Blob
-            recorder.onstop = () => {
-                const audioBlob = new Blob(audioChunksRef.current, {
-                    type : recorder.mimeType
-                });
-
-                const url = URL.createObjectURL(audioBlob);
-                setAudioURL(url); 
-                audioChunksRef.current = []; 
-            };
-
-            recorder.start(250); //starts recording, give me recorded audio data in chunks about every 250 millisecond
-
-            recorderRef.current = recorder;
-            setIsRecording(true);
         } catch (error) {
             console.error("could not access microphone: ", error);
         }
@@ -67,8 +75,11 @@ export default function VoiceRecorder() {
             track.stop();
         });
 
+        webSocketRef.current?.close(); //tells both frontend and backend to stop the WebSocket Connection
+
         recorderRef.current = null; 
         streamRef.current = null; 
+        webSocketRef.current = null; 
 
         setIsRecording(false);
     }

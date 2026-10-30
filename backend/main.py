@@ -32,12 +32,8 @@ async def websocket_endpoint(websocket : WebSocket):
     await websocket.accept()
 
     while True:
-        message = await websocket.receive_text() #wait until the client sends a text message
+        audio_chunk = await websocket.receive_bytes() #wait until the client sends a blob
 
-        print("Received: ", message)
+        print("Received audio bytes: ", len(audio_chunk))
 
-        await websocket.send_text("Backend received your message")
-
-
-
-        
+   
