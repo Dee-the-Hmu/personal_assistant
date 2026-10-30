@@ -8,58 +8,57 @@ returns React Component that records microphone audio
 export default function VoiceRecorder() {
     const [isRecording, setIsRecording] = useState(false); 
 
-    const recorderRef = useRef<MediaRecorder | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
-    const audioChunksRef = useRef<Blob[]>([]);
-
     const webSocketRef = useRef<WebSocket | null>(null); 
 
-    const [audioURL, setAudioURL] = useState<string | null>(null); 
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const workletRef = useRef<AudioWorkletNode | null>(null);
 
     // start Microhpone Access
     // records audio in chunks 
     // combine those audio chunks into a playable audio Blob when stopped
     async function startRecording() {
         try{ 
-
             const socket = new WebSocket("ws://127.0.0.1:8000/ws"); 
+
+            webSocketRef.current = socket;
 
             socket.onopen = async () => {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     audio : true,
                 })
-                
-                const recorder = new MediaRecorder(stream); //recorder now knows which stream it should record
-
-                //recorder produces an event whenever an audio chunk becomes available
-                //event.data = a Blob (browser obj representing binary data)
-                //don't send empty chunks
-                recorder.ondataavailable = (event) => {
-                    if(event.data.size > 0) { //Blob size in bytes
-                        audioChunksRef.current.push(event.data);
-
-                        //send each audio chunk to backend using websocket here
-                        socket.send(event.data);
-                    }
-                };
-
-                recorder.start(250); //starts recording, give me recorded audio data in chunks about every 250 millisecond
-
                 streamRef.current = stream;
-                recorderRef.current = recorder; 
-                webSocketRef.current = socket;
+                
+                // AudioContext = owns/manages the audio system
+                const audioContext = new AudioContext(); 
 
-                //combine chunks into final Blob (playable audio)
-                recorder.onstop = () => {
-                    const audioBlob = new Blob(audioChunksRef.current, {
-                        type : recorder.mimeType
-                    });
+                console.log("Sample rate: ", audioContext.sampleRate);
 
-                    const url = URL.createObjectURL(audioBlob);
-                    setAudioURL(url); 
-                    audioChunksRef.current = []; 
+                //load our custom AudioProcessor
+                // Files inside Vite's `public/` directory are served from the website root `/`.
+                // So public/audioProcessor.js is available as /audioProcessor.js.
+                await audioContext.audioWorklet.addModule("/audioProcessor.js"); //addModule() returns a promise
+
+                // Turn the microphone MediaStream into a Web Audio source node.
+                // creates a node that allows your microphone audio to enter the Web Audio graph.
+                //puts your microphone into that Audio system 
+                const source = audioContext.createMediaStreamSource(stream); // microphone → MediaStream → source
+
+                // connects to your custom processor
+                const worklet = new AudioWorkletNode(
+                    audioContext,
+                    "audio-processor"
+                );
+
+                // Connect nodes in our Web Audio processing graph: Connect microphone → worklet
+                source.connect(worklet);
+
+                worklet.port.onmessage = (event) => {
+                    console.log(event.data);
                 };
 
+                audioContextRef.current = audioContext;
+                workletRef.current = worklet;
                 setIsRecording(true);
             };
         } catch (error) {
@@ -68,7 +67,8 @@ export default function VoiceRecorder() {
     }
 
     function stopRecording() {
-        recorderRef.current?.stop();  //this triggers recorder.onstop
+
+        workletRef.current?.disconnect();
 
         //get the media (audio) track belonging to the stream
         streamRef.current?.getTracks().forEach((track) => { 
@@ -77,9 +77,10 @@ export default function VoiceRecorder() {
 
         webSocketRef.current?.close(); //tells both frontend and backend to stop the WebSocket Connection
 
-        recorderRef.current = null; 
         streamRef.current = null; 
         webSocketRef.current = null; 
+        audioContextRef.current = null;
+        workletRef.current = null; 
 
         setIsRecording(false);
     }
@@ -95,7 +96,7 @@ export default function VoiceRecorder() {
                 Stop
             </button>
 
-            {audioURL && (<audio src={audioURL} controls /> )}
+            
         </div>
     );  
 }
