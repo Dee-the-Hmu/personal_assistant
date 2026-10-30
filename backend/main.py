@@ -1,6 +1,10 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+from voice.stt.deepgram import DeepgramSTT
+import asyncio
+import time
+
 #creates our web application
 app = FastAPI(); 
 
@@ -29,14 +33,65 @@ while True = keeps listening while the connection stays open
 """
 @app.websocket("/ws")
 async def websocket_endpoint(websocket : WebSocket):
-    await websocket.accept()
+    await websocket.accept() # accepts the connection  from the browser/frontend 
 
+    stt = DeepgramSTT()
+    # Establish FastAPI → Deepgram WebSocket connection
+    await stt.connect()  #connects with STT provider ()
+
+    #do 2 pipelines at the Same Time (Concurrency)
+    # 1) Browser -> audio -> STT provider
+    # 2) STT provider -> transcript -> Browser 
+
+    #1st pipeline
+    async def send_audio_to_stt():
+        try:
+            while True:
+                audio_chunk = await websocket.receive_bytes()
+
+                await stt.send_audio(audio_chunk)
+        except WebSocketDisconnect:
+            print("Browser Disconnected")
+
+    #2nd pipeline
+    async def receive_transcripts():
+        while True: 
+            #okay to wait for STT to send transcript since this is a separate task 
+            transcript = await stt.receive_transcript()
+
+            if transcript is not None: 
+
+                backend_received_time = time.perf_counter()
+                print(
+                    f"[BACKEND] Transcript received at: "
+                    f"{backend_received_time:.3f}"
+                )   
+                await websocket.send_json({
+                    "type": "transcript",
+                    "text": transcript,
+                    "backend_received_time": backend_received_time,
+                })
+             
+                
+                
+                # await websocket.send_text(transcript) #sends text back thru the same browser websocket
+
+    #asyncio.create_task() schedules Each coroutine to run Concurrently
+    audio_task = asyncio.create_task(send_audio_to_stt())
+    transcript_task = asyncio.create_task(receive_transcripts())
+
+    #both task are registered with the Event Loop
+    # cooperative async concurrency
     try:
-        while True: #websocket is a continuous stream
-            audio_chunk = await websocket.receive_bytes() #wait until the client sends a blob
-            print("Received audio bytes: ", len(audio_chunk))
+        # gather() waits for both tasks 
+        await asyncio.gather(
+            audio_task,
+            transcript_task
+        )
+    finally:
+        # cancel() requests that these tasks stop if they are still running
+        audio_task.cancel()
+        transcript_task.cancel()
 
-    except WebSocketDisconnect: #when the client disconnects while await websocket.receive_bytes(), WebSocketDisconnect Exception is raised
-        print("Voice WebSocket disconnected")
-
+        await stt.close()
    
