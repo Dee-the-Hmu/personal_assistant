@@ -86,5 +86,5 @@ export default function VoiceRecorder() {
 
             {audioURL && (<audio src={audioURL} controls /> )}
         </div>
-    );
+    );  
 }
