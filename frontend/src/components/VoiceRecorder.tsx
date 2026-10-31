@@ -48,7 +48,7 @@ export default function VoiceRecorder() {
             
             // AudioContext = owns/manages the Web Audio system.
             const audioContext = new AudioContext({
-                sampleRate: 24000,
+                sampleRate: 16000,
             }); 
 
            console.log("Actual sample rate:", audioContext.sampleRate);
@@ -76,11 +76,10 @@ export default function VoiceRecorder() {
             // microphone → MediaStream → source → AudioWorklet
             source.connect(worklet);
 
-            // Calculate approximately how many samples equal 100 ms.
-            // Example at 48,000 Hz:
-            // 48000 * 0.1 = 4800 samples.
+            // 0.08 seconds = 80 ms.
+            // Deepgram recommends ~80 ms chunks for Flux.
             const samplesPerChunk = Math.floor(
-                audioContext.sampleRate * 0.1
+                audioContext.sampleRate * 0.5
             );
 
             // onmessage runs EVERY TIME audioProcessor.js sends us
