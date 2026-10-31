@@ -137,7 +137,17 @@ export default function VoiceRecorder() {
             };
 
             socket.onmessage = (event) => {
-                console.log("Transcript: ", event.data)
+                const message = JSON.parse(event.data); //JSON string -> javascript 
+
+                if (message.type === "assistant_chunk"){
+                    console.log("Assistant chunk: ", message.text);
+                }
+
+                if(message.type === "assistant_done"){
+                    console.log("Assistant response complete");
+                }
+                
+
             };
 
             // Save these so stopRecording() can access and clean them up.
